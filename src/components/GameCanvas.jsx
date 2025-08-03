@@ -1,13 +1,17 @@
 // src/components/GameCanvas.js
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
-import socket from "../socket";
+import {initializeSocket} from "../socket";
+import { useDispatch } from "react-redux";
 
 const GameCanvas = () => {
   const gameRef = useRef(null);
+  const dispatch = useDispatch();
+
  
 
   useEffect(() => {
+    const socket = initializeSocket(dispatch);
     const tileSize = 16;
     let player;
     let clientId = null;
@@ -49,19 +53,14 @@ const GameCanvas = () => {
         ); // Stretch to fit
 
         player = this.physics.add.sprite(tileSize * 5, tileSize * 5, "player");
+        
+      
         this.player = player;
         this.cameras.main.startFollow(this.player);
         this.player.setCollideWorldBounds(true);
         this.cursors = this.input.keyboard.createCursorKeys();
 
-        socket.send(
-          JSON.stringify({
-            type: "join",
-            id: socket.id,
-            x: player.x,
-            y: player.y,
-          })
-        );
+        
 
         socket.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
@@ -172,7 +171,7 @@ const GameCanvas = () => {
         gameRef.current = null;
       }
     };
-  }, []);
+  }, [dispatch]);
 
   return <div id="game-container" />;
 };
