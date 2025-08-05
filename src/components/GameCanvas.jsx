@@ -1,27 +1,37 @@
 // src/components/GameCanvas.js
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
-import {initializeSocket} from "../socket";
-import { useDispatch } from "react-redux";
+import { initializeSocket } from "../socket";
+import { useDispatch, useSelector } from "react-redux";
 
 const GameCanvas = () => {
   const gameRef = useRef(null);
   const dispatch = useDispatch();
-
- 
+  const initialOtherPlayers = useSelector((state) => state.players);
+  console.log("INITIAL OTHER PLAYERS: ", initialOtherPlayers);
 
   useEffect(() => {
     const socket = initializeSocket(dispatch);
     const tileSize = 16;
     let player;
-    let clientId = null;
-    const otherPlayers = {};
+    let clientId = socket.id;
+    let otherPlayers = Object.entries(initialOtherPlayers || {})
+      .filter(([id]) => id !== socket.id)
+      .map((id, value) => ({
+        id: id,
+        x: value.x,
+        y: value.y,
+      }));
+    otherPlayers = Object.entries(initialOtherPlayers).filter(
+      ([id]) => id !== clientId
+    );
 
     class GameScene extends Phaser.Scene {
       constructor() {
         super({ key: "GameScene" });
         this.player = null;
         this.cursors = null;
+        this.otherPlayerSprites = {};
         this.moveCooldown = 0;
         this.moveDelay = 150;
       }
@@ -47,51 +57,51 @@ const GameCanvas = () => {
 
       create() {
         const bg = this.add.image(0, 0, "tiles").setOrigin(0, 0);
+        console.log("OTHER PLAYERS: ", otherPlayers);
         bg.setDisplaySize(
           this.sys.game.config.width,
           this.sys.game.config.height
         ); // Stretch to fit
 
         player = this.physics.add.sprite(tileSize * 5, tileSize * 5, "player");
-        
-      
+
         this.player = player;
         this.cameras.main.startFollow(this.player);
         this.player.setCollideWorldBounds(true);
         this.cursors = this.input.keyboard.createCursorKeys();
-
-        
+        this.otherPlayerSprites = {};
+        Object.entries(otherPlayers).forEach((player) => {
+          console.log("Adding other player sprite: ", player[1]);
+          this.otherPlayerSprites[player[1][0]] = this.add.sprite(
+            player[1][1].x,
+            player[1][1].y,
+            `player`
+          );
+        });
+        console.log("Other players sprites: ", this.otherPlayerSprites);
 
         socket.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
-          console.log("THE DATA IS: ", data);
-          if (data.type === "id"){
-            clientId = data.id;
-            console.log("CLIENT ID IS : ",clientId);
-            socket.send(
-              JSON.stringify({
-                type: "join",
-                id: clientId,
-                x: player.x,
-                y: player.y,
-              })
-            );
-            return
-          }
+
+          console.log("OTHER PLAYERS: ", otherPlayers);
+
           if (data.type === "move" && data.id !== socket.id) {
-            console.log("the other player moved")
-            if (!otherPlayers[data.id]) {
-              otherPlayers[data.id] = this.add.sprite(data.x, data.y, "player");
+            if (!this.otherPlayerSprites[data.id]) {
+              this.otherPlayerSprites[data.id] = this.add.sprite(
+                data.x,
+                data.y,
+                "player"
+              );
             } else {
-              otherPlayers[data.id].x = data.x;
-              otherPlayers[data.id].y = data.y;
+              this.otherPlayerSprites[data.id].x = data.x;
+              this.otherPlayerSprites[data.id].y = data.y;
             }
           }
 
           if (data.type === "leave") {
-            if (otherPlayers[data.id]) {
-              otherPlayers[data.id].destroy();
-              delete otherPlayers[data.id];
+            if (this.otherPlayerSprites[data.id]) {
+              this.otherPlayerSprites[data.id].destroy();
+              delete this.otherPlayerSprites[data.id];
             }
           }
         };
@@ -134,13 +144,13 @@ const GameCanvas = () => {
           );
         }
         if (moved) {
-          console.log("player has moved")
+          console.log("player has moved");
           socket.send(
             JSON.stringify({
               type: "move",
               x: player.x,
               y: player.y,
-              id: socket.id
+              id: socket.id,
             })
           );
         }
@@ -166,12 +176,11 @@ const GameCanvas = () => {
     }
     return () => {
       if (gameRef.current) {
-     
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
     };
-  }, [dispatch]);
+  }, [dispatch, initialOtherPlayers]);
 
   return <div id="game-container" />;
 };

@@ -7,7 +7,7 @@ const playersSlice = createSlice({
   reducers: {
     updatePlayer(state, action) {
       const { id, x, y } = action.payload;
-      state[id] = { x, y };
+      state[id] = { id, x, y };
     },
   },
 });
